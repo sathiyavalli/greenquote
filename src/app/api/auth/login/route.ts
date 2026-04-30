@@ -14,7 +14,11 @@ export async function POST(req: NextRequest) {
     logger.info('User logged in', { email: input.email });
 
     const response = NextResponse.json(
-      { success: true, data: result, timestamp: new Date().toISOString() },
+      { 
+        success: true, 
+        data: result, 
+        timestamp: new Date().toISOString() 
+      },
       { status: 200 }
     );
 
@@ -29,21 +33,53 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
+    console.error('Login error:', error);
+    
     if (error instanceof AppError) {
+      logger.error('AppError during login', { 
+        code: error.code, 
+        message: error.message,
+        statusCode: error.statusCode
+      });
       return NextResponse.json(
-        { success: false, error: { code: error.code, message: error.message }, timestamp: new Date().toISOString() },
+        { 
+          success: false, 
+          error: { 
+            code: error.code || 'ERROR', 
+            message: error.message 
+          }, 
+          timestamp: new Date().toISOString()
+        },
         { status: error.statusCode }
       );
     }
+
     if ((error as any)?.name === 'ZodError') {
+      const zodErrors = (error as any).errors;
+      logger.error('Validation error during login', { errors: zodErrors });
       return NextResponse.json(
-        { success: false, error: { code: 'VALIDATION_ERROR', message: (error as any).errors[0].message }, timestamp: new Date().toISOString() },
+        { 
+          success: false, 
+          error: { 
+            code: 'VALIDATION_ERROR', 
+            message: zodErrors[0]?.message || 'Validation failed' 
+          }, 
+          timestamp: new Date().toISOString()
+        },
         { status: 400 }
       );
     }
-    logger.error('Login error', error);
+
+    logger.error('Unexpected error during login', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_SERVER_ERROR', message: 'Login failed' }, timestamp: new Date().toISOString() },
+      { 
+        success: false, 
+        error: { 
+          code: 'INTERNAL_SERVER_ERROR', 
+          message: 'An unexpected error occurred during login' 
+        }, 
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }

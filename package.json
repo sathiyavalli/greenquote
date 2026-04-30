@@ -17,7 +17,7 @@
     "test:all": "npm run test && npm run test:api && npm run test:e2e",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:seed": "ts-node prisma/seed.ts",
+    "db:seed": "node prisma/seed.js",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

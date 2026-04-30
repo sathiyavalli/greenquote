@@ -29,10 +29,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const storedToken = localStorage.getItem('auth-token');
     const storedUser = localStorage.getItem('auth-user');
+
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setToken(storedToken);
+        setUser(parsedUser);
+      } catch {
+        localStorage.removeItem('auth-token');
+        localStorage.removeItem('auth-user');
+      }
     }
+
     setIsLoading(false);
   }, []);
 
@@ -44,9 +52,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const json = await res.json();
-    if (!res.ok) throw new Error(json.error?.message || 'Login failed');
+
+    if (!res.ok) {
+      const errorMessage = json.error?.message || json.message || 'Login failed';
+      throw new Error(errorMessage);
+    }
 
     const { token: newToken, user: newUser } = json.data;
+
+    if (!newToken || !newUser) {
+      throw new Error('Invalid login response');
+    }
+
     localStorage.setItem('auth-token', newToken);
     localStorage.setItem('auth-user', JSON.stringify(newUser));
     setToken(newToken);

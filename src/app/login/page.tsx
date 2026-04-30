@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
@@ -11,8 +11,16 @@ import { useAuth } from '@/hooks/useAuth';
 export default function LoginPage() {
   const [serverError, setServerError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, token, isLoading: authLoading } = useAuth();
   const router = useRouter();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && token) {
+      console.log('Already logged in, redirecting to quotes');
+      router.push('/quotes');
+    }
+  }, [token, authLoading, router]);
 
   const {
     register,
@@ -27,7 +35,8 @@ export default function LoginPage() {
       await login(data.email, data.password);
       router.push('/quotes');
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : 'Login failed');
+      const errorMsg = err instanceof Error ? err.message : 'Login failed';
+      setServerError(errorMsg);
     } finally {
       setIsLoading(false);
     }

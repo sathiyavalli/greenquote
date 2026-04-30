@@ -28,7 +28,11 @@ export const quoteInputSchema = z.object({
     .number()
     .positive('System size must be positive')
     .min(1, 'System size must be at least 1 kW'),
-  downPayment: z.number().positive('Down payment must be positive').optional(),
+  downPayment: z
+    .number()
+    .nonnegative('Down payment cannot be negative')
+    .optional()
+    .default(0),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
