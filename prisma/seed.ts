@@ -12,7 +12,8 @@ async function main() {
   await prisma.user.deleteMany({});
 
   // Create admin user
-  const adminPassword = await bcrypt.hash('admin123', 10);
+  const adminPlainPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const adminPassword = await bcrypt.hash(adminPlainPassword, 10);
   const admin = await prisma.user.create({
     data: {
       email: 'admin@test.com',
@@ -25,7 +26,8 @@ async function main() {
   console.log('✅ Created admin user:', admin.email);
 
   // Create test users
-  const userPassword = await bcrypt.hash('user123', 10);
+  const userPlainPassword = process.env.USER_PASSWORD || 'user123';
+  const userPassword = await bcrypt.hash(userPlainPassword, 10);
   const user1 = await prisma.user.create({
     data: {
       email: 'user1@test.com',
