@@ -81,7 +81,7 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-MySQL is exposed on `localhost:3306` and matches the default `.env.example` connection settings.
+MySQL is exposed on `localhost:3307` and matches the default `.env.example` connection settings.
 
 5. Run Prisma migrations
 ```bash
@@ -195,11 +195,11 @@ For testing (from seed data):
 
 **Admin Account:**
 - Email: `admin@test.com`
-- Password: value from `ADMIN_PASSWORD` in `.env` (fallback: `admin123`)
+- Password: `AdminPass123!`
 
 **User Accounts:**
-- Email: `john@example.com` / `user2@test.com`
-- Password: value from `USER_PASSWORD` in `.env` (fallback: `user123`)
+- Email: `john@example.com` / `jane@example.com`
+- Passwords: `UserPass456!` / `UserPass789!`
 
 ## Configuration
 
@@ -208,7 +208,7 @@ For testing (from seed data):
 See `.env.example` for all available options:
 
 ```env
-DATABASE_URL="mysql://user:password@localhost:3306/greenquote"
+DATABASE_URL="mysql://user:password@localhost:3307/greenquote"
 JWT_SECRET="your-secret-key"
 NODE_ENV="development"
 ```
