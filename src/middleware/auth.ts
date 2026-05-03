@@ -30,3 +30,9 @@ export function verifyAuthorization(role: string | string[], userRole: string) {
     throw new AuthorizationError('Insufficient permissions');
   }
 }
+
+export function verifyAdmin(request: NextRequest) {
+  const payload = verifyAuthentication(request);
+  verifyAuthorization('admin', payload.role || 'user');
+  return payload;
+}

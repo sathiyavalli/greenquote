@@ -1,11 +1,10 @@
-import { RiskBand } from '@/utils/pricing';
+'use client';
 
-interface OfferResult {
-  termYears: number;
-  apr: number;
-  principalUsed: number;
-  monthlyPayment: number;
-}
+import { useState, useRef, useEffect } from 'react';
+import { RiskBand } from '@/utils/pricing';
+import { formatEuro } from '@/utils/currency';
+import AmortizationSchedule from '@/components/AmortizationSchedule';
+import { calculateAmortizationSchedule } from '@/utils/amortization';
 
 interface QuoteDetailsProps {
   id: string;
@@ -17,7 +16,12 @@ interface QuoteDetailsProps {
   systemPrice: number;
   principalAmount: number;
   riskBand: RiskBand;
-  offers: OfferResult[];
+  offers: Array<{
+    termYears: number;
+    apr: number;
+    principalUsed: number;
+    monthlyPayment: number;
+  }>;
   createdAt: Date | string;
 }
 
@@ -35,6 +39,20 @@ const RISK_BAND_DESCRIPTIONS: Record<RiskBand, string> = {
 
 export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
   const colors = RISK_BAND_COLORS[quote.riskBand];
+  const [selectedOfferIndex, setSelectedOfferIndex] = useState<number | null>(null);
+  const [showFullSchedule, setShowFullSchedule] = useState(false);
+  const amortizationRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to amortization schedule when a new offer is selected
+  useEffect(() => {
+    if (selectedOfferIndex !== null && amortizationRef.current) {
+      setTimeout(() => {
+        amortizationRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [selectedOfferIndex]);
+
+  const selectedOffer = selectedOfferIndex !== null ? quote.offers[selectedOfferIndex] : null;
 
   return (
     <div className="space-y-8">
@@ -99,21 +117,21 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
           <div className="bg-gray-50 rounded-lg p-4">
             <p className="text-sm text-gray-600 text-center">System Price</p>
             <p className="text-2xl font-bold text-gray-900 text-center">
-              ${quote.systemPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              {formatEuro(quote.systemPrice, { maximumFractionDigits: 2 })}
             </p>
           </div>
 
           <div className="bg-gray-50 rounded-lg p-4">
             <p className="text-sm text-gray-600 text-center">Down Payment</p>
             <p className="text-2xl font-bold text-gray-900 text-center">
-              ${quote.downPayment.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              {formatEuro(quote.downPayment, { maximumFractionDigits: 2 })}
             </p>
           </div>
 
           <div className="bg-green-50 rounded-lg p-4">
             <p className="text-sm text-green-600 text-center font-medium">Principal to Finance</p>
             <p className="text-2xl font-bold text-green-700 text-center">
-              ${quote.principalAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              {formatEuro(quote.principalAmount, { maximumFractionDigits: 2 })}
             </p>
           </div>
         </div>
@@ -140,7 +158,7 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
           {quote.offers.map((offer, idx) => (
             <div
               key={idx}
-              className="border border-gray-200 rounded-lg p-5 hover:border-green-500 hover:bg-green-50 transition cursor-pointer"
+              className="border border-gray-200 rounded-lg p-5 hover:border-green-500 hover:bg-green-50 transition"
             >
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -154,12 +172,12 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
                 <div className="text-right">
                   <p className="text-sm text-gray-600">Monthly Payment</p>
                   <p className="text-2xl font-bold text-green-600">
-                    ${offer.monthlyPayment.toFixed(2)}
+                    {formatEuro(offer.monthlyPayment, { maximumFractionDigits: 2 })}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded p-3 text-sm">
+              <div className="bg-gray-50 rounded p-3 text-sm mb-4">
                 <p className="text-gray-600">
                   Total payments:{' '}
                   <span className="font-semibold text-gray-900">
@@ -167,10 +185,26 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
                   </span>
                   {' | '}Total amount financed:{' '}
                   <span className="font-semibold text-gray-900">
-                    ${offer.principalUsed.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                    {formatEuro(offer.principalUsed, { maximumFractionDigits: 2 })}
                   </span>
                 </p>
               </div>
+
+              <button
+                onClick={() => {
+                  setSelectedOfferIndex(selectedOfferIndex === idx ? null : idx);
+                  setShowFullSchedule(false);
+                }}
+                className={`w-full px-4 py-2 rounded-lg font-medium transition ${
+                  selectedOfferIndex === idx
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                }`}
+              >
+                {selectedOfferIndex === idx
+                  ? 'Hide Amortization Schedule'
+                  : 'View Amortization Schedule'}
+              </button>
             </div>
           ))}
         </div>
@@ -188,8 +222,14 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
         <h3 className="text-lg font-semibold mb-6">Total Cost by Term</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {quote.offers.map((offer, idx) => {
-            const totalCost = offer.monthlyPayment * offer.termYears * 12;
-            const totalInterest = totalCost - quote.principalAmount;
+            const schedule = calculateAmortizationSchedule(
+              quote.principalAmount,
+              offer.apr,
+              offer.termYears,
+              offer.monthlyPayment
+            );
+            const totalCost = schedule.totalPayment;
+            const totalInterest = schedule.totalInterest;
 
             return (
               <div key={idx} className="border border-gray-700 rounded p-4">
@@ -197,15 +237,15 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
                 <dl className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <dt>Principal:</dt>
-                    <dd>${quote.principalAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</dd>
+                    <dd>{formatEuro(quote.principalAmount, { maximumFractionDigits: 2 })}</dd>
                   </div>
                   <div className="flex justify-between text-red-400">
                     <dt>Interest:</dt>
-                    <dd>${totalInterest.toLocaleString('en-US', { maximumFractionDigits: 2 })}</dd>
+                    <dd>{formatEuro(totalInterest, { maximumFractionDigits: 2 })}</dd>
                   </div>
                   <div className="flex justify-between text-green-400 font-bold border-t border-gray-700 pt-1">
                     <dt>Total Cost:</dt>
-                    <dd>${totalCost.toLocaleString('en-US', { maximumFractionDigits: 2 })}</dd>
+                    <dd>{formatEuro(totalCost, { maximumFractionDigits: 2 })}</dd>
                   </div>
                 </dl>
               </div>
@@ -213,6 +253,30 @@ export function QuoteDetailsComponent({ quote }: { quote: QuoteDetailsProps }) {
           })}
         </div>
       </div>
+
+      {/* Amortization Schedule Section */}
+      {selectedOffer && (
+        <div ref={amortizationRef} className="mt-8 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h3 className="text-xl font-bold text-gray-900">
+              Detailed Payment Schedule ({selectedOffer.termYears}-Year Term)
+            </h3>
+            <button
+              onClick={() => setShowFullSchedule(!showFullSchedule)}
+              className="text-sm font-medium text-green-600 hover:text-green-700 underline"
+            >
+              {showFullSchedule
+                ? 'Show First 12 Months'
+                : `Show All ${selectedOffer.termYears * 12} Payments`}
+            </button>
+          </div>
+          <AmortizationSchedule
+            offer={selectedOffer}
+            principal={quote.principalAmount}
+            showFullSchedule={showFullSchedule}
+          />
+        </div>
+      )}
     </div>
   );
 }

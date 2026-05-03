@@ -1,17 +1,61 @@
-// Simple console-based structured logging
+import pino from 'pino';
+
+type LogData = Record<string, unknown> | unknown;
+
+const isDevelopment = process.env.NODE_ENV !== 'production';
+const logLevel = process.env.LOG_LEVEL || 'info';
+
+// Simple pino configuration without transport to avoid worker thread issues in Next.js
+const rawLogger = pino({
+  level: logLevel,
+  base: {
+    service: 'greenquote',
+    env: process.env.NODE_ENV || 'development',
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+});
+
+function normalizeData(data?: LogData): LogData {
+  if (data instanceof Error) {
+    return {
+      name: data.name,
+      message: data.message,
+      stack: data.stack,
+    };
+  }
+  return data;
+}
+
+// Keep the same call signature used across the codebase.
 export const logger = {
-  info: (message: string, data?: any) => {
-    console.log(JSON.stringify({ level: 'INFO', message, data, timestamp: new Date() }));
-  },
-  error: (message: string, error?: any) => {
-    console.error(JSON.stringify({ level: 'ERROR', message, error: String(error), timestamp: new Date() }));
-  },
-  warn: (message: string, data?: any) => {
-    console.warn(JSON.stringify({ level: 'WARN', message, data, timestamp: new Date() }));
-  },
-  debug: (message: string, data?: any) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(JSON.stringify({ level: 'DEBUG', message, data, timestamp: new Date() }));
+  info: (message: string, data?: LogData) => {
+    if (data === undefined) {
+      rawLogger.info(message);
+      return;
     }
+    rawLogger.info({ data: normalizeData(data) }, message);
+  },
+  error: (message: string, error?: LogData) => {
+    if (error === undefined) {
+      rawLogger.error(message);
+      return;
+    }
+    rawLogger.error({ error: normalizeData(error) }, message);
+  },
+  warn: (message: string, data?: LogData) => {
+    if (data === undefined) {
+      rawLogger.warn(message);
+      return;
+    }
+    rawLogger.warn({ data: normalizeData(data) }, message);
+  },
+  debug: (message: string, data?: LogData) => {
+    if (data === undefined) {
+      rawLogger.debug(message);
+      return;
+    }
+    rawLogger.debug({ data: normalizeData(data) }, message);
   },
 };
+
+export { rawLogger };

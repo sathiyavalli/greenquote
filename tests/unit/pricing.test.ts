@@ -67,7 +67,7 @@ describe('Pricing Utilities', () => {
     it('should calculate monthly payment correctly', () => {
       // Test case: $10,000 principal, 6.9% APR, 5 years
       const monthlyPayment = calculateMonthlyPayment(10000, 6.9, 5);
-      expect(monthlyPayment).toBeCloseTo(193.33, 1);
+      expect(monthlyPayment).toBeCloseTo(197.54, 1);
     });
 
     it('should handle 0% APR', () => {
@@ -103,9 +103,9 @@ describe('Pricing Utilities', () => {
       // Example: $6000 principal, 6.9% APR, 5 years
       // Monthly rate = 6.9 / 100 / 12 = 0.00575
       // Number of payments = 5 * 12 = 60
-      // Expected monthly payment ≈ $116
+      // Expected monthly payment ≈ $118.52
       const payment = calculateMonthlyPayment(6000, 6.9, 5);
-      expect(payment).toBeCloseTo(116, 0);
+      expect(payment).toBeCloseTo(118.52, 1);
     });
   });
 

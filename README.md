@@ -11,10 +11,13 @@ A full-stack TypeScript application for solar financing pre-qualification built 
 - ✅ Monthly payment calculations for 5/10/15 year terms
 - ✅ User-specific quote management
 - ✅ Admin dashboard for quote management and filtering
+- ✅ Table-based quote views for both users and admins
 - ✅ Fully typed with TypeScript
 - ✅ Comprehensive test suite (Jest + Supertest + Playwright)
 - ✅ Docker containerization
 - ✅ Production-ready error handling and logging
+- ✅ Print-ready quote export (PDF via browser Print/Save as PDF)
+- ✅ **[NEW] Detailed amortization schedules** - View month-by-month payment breakdowns for each financing option
 
 ## Tech Stack
 
@@ -31,6 +34,7 @@ A full-stack TypeScript application for solar financing pre-qualification built 
 - Node.js
 - TypeScript
 - JWT authentication
+- Pino structured logging
 
 **Database:**
 - MySQL 8.0+
@@ -76,6 +80,8 @@ cp .env.example .env
 ```bash
 docker-compose up -d
 ```
+
+MySQL is exposed on `localhost:3306` and matches the default `.env.example` connection settings.
 
 5. Run Prisma migrations
 ```bash
@@ -124,6 +130,8 @@ npm run test:api
 npm run test:e2e
 ```
 
+Includes a Playwright flow for: sign-in -> create quote -> view quote results.
+
 ### All Tests
 ```bash
 npm run test:all
@@ -147,6 +155,11 @@ npm run test:all
 
 ### Health
 - `GET /api/health` - Health check
+
+### API Docs
+- `GET /api/openapi` - OpenAPI specification (JSON)
+- `GET /api/docs` - Swagger UI (auto-rendered docs)
+- `GET /docs` - Embedded docs page in app
 
 ## Project Structure
 
@@ -182,11 +195,11 @@ For testing (from seed data):
 
 **Admin Account:**
 - Email: `admin@test.com`
-- Password: `admin123`
+- Password: value from `ADMIN_PASSWORD` in `.env` (fallback: `admin123`)
 
 **User Accounts:**
-- Email: `user1@test.com` / `user2@test.com`
-- Password: `user123`
+- Email: `john@example.com` / `user2@test.com`
+- Password: value from `USER_PASSWORD` in `.env` (fallback: `user123`)
 
 ## Configuration
 
@@ -233,8 +246,8 @@ The following features are designed to be added incrementally:
 1. **OAuth Integration** - Google/GitHub login via Keycloak
 2. **Advanced Analytics** - Dashboard with quote trends and metrics
 3. **Email Notifications** - Quote confirmations and updates
-4. **Amortization Schedule** - Detailed payment breakdown per offer
-5. **PDF Export** - Download quotes as formatted documents
+4. **Schedule Visualization** - Charts showing principal vs. interest breakdown
+5. **Early Payoff Calculator** - Show impact of extra monthly payments
 6. **CI/CD Pipeline** - GitHub Actions for automated testing/deployment
 7. **GCP Deployment** - Cloud Run, Cloud SQL, Cloud Storage
 8. **Caching Layer** - Redis for analytics and quote caching
@@ -247,6 +260,8 @@ The following features are designed to be added incrementally:
 ```bash
 docker-compose up --build
 ```
+
+When running in containers, startup applies Prisma migrations before launching the app.
 
 ### GCP Cloud Run
 
@@ -265,10 +280,62 @@ gcloud run deploy greenquote --image gcr.io/PROJECT_ID/greenquote --platform man
 
 ## Monitoring & Logging
 
-- Structured JSON logging for all requests/errors
+- Structured JSON logging with Pino for request, response, and error paths across all API routes
+- Human-readable logs in development via pino-pretty
 - Health check endpoint for monitoring
-- Request/response logging in middleware
+- Configurable log levels via environment variables
 - Error tracking with stack traces
+
+### Pino Configuration
+
+Use these environment variables (already included in `.env.example`):
+
+```env
+LOG_LEVEL="info"
+LOG_PRETTY="true"
+```
+
+- `LOG_LEVEL`: one of `fatal`, `error`, `warn`, `info`, `debug`, `trace`
+- `LOG_PRETTY`: `true` for formatted local logs, `false` for raw JSON (recommended in production)
+
+### Verify Observability Locally
+
+1. Start app:
+```bash
+npm run dev
+```
+
+2. Trigger API route (example):
+```bash
+curl http://localhost:3000/api/health
+```
+
+3. Confirm terminal logs include structured Pino entries for errors and operational events.
+
+## Amortization Schedules
+
+View detailed month-by-month payment breakdowns for your solar financing options:
+
+1. Navigate to any quote in **My Solar Quotes**
+2. In the **Your Financing Options** section, click **"View Amortization Schedule"** on any term
+3. The schedule expands to show:
+   - First 12 months of payments by default
+   - Month number, payment date, principal/interest split, and remaining balance
+   - Total interest cost and total amount paid
+4. Click **"Show All Payments"** to view the complete schedule for the entire loan term
+5. Use this information to understand your long-term financing commitment
+
+For detailed information, see [AMORTIZATION_SCHEDULE.md](AMORTIZATION_SCHEDULE.md)
+
+## Quote Export (PDF)
+
+Quotes can be exported as PDF from the quote details page:
+
+1. Open any quote details page (`/quotes/:id`)
+2. Click **Print Quote**
+3. In the browser print dialog, select **Save as PDF**
+
+The app includes print-friendly styles (`print-hidden`) so navigation and action controls are excluded from exported documents.
 
 ## Security
 

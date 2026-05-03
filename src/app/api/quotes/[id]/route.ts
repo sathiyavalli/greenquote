@@ -1,86 +1,143 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { quoteService } from '@/services/quoteService';
 import { verifyAuthentication } from '@/middleware/auth';
-import { ValidationError, AuthenticationError, AppError } from '@/utils/errors';
+import { AuthorizationError, NotFoundError, ValidationError } from '@/utils/errors';
+import { prisma } from '@/lib/prisma';
+import { apiSuccess, withApiErrorHandler } from '@/lib/api';
+import { logRequestStart, logRequestEnd } from '@/lib/logging-middleware';
 
-export async function GET(
+export const GET = withApiErrorHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
+) => {
+  const startTime = logRequestStart(request);
+  const payload = verifyAuthentication(request);
+  const userId = payload.userId;
+  const userRole = payload.role || 'user';
+  const quoteId = params.id;
+
+  if (!quoteId) {
+    throw new ValidationError('Quote ID is required');
+  }
+
+  let quote;
   try {
-    // Verify authentication
-    const payload = verifyAuthentication(request);
-    const userId = payload.userId;
-    const userRole = payload.role || 'user';
-
-    // Get quote ID from params
-    const quoteId = params.id;
-
-    if (!quoteId) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          message: 'Quote ID is required',
-        },
-        { status: 400 }
-      );
-    }
-
-    // Fetch quote
-    // If user is not admin, enforce ownership
-    let quote;
-    if (userRole === 'admin') {
-      quote = await quoteService.getQuote(quoteId);
-    } else {
-      quote = await quoteService.getQuote(quoteId, userId);
-    }
-
-    return NextResponse.json(quote, { status: 200 });
+    quote = await quoteService.getQuote(quoteId);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return NextResponse.json(
-        {
-          error: 'Not found',
-          message: error.message,
-        },
-        { status: 404 }
-      );
+      throw new NotFoundError(error.message);
     }
-
-    if (error instanceof AuthenticationError) {
-      return NextResponse.json(
-        {
-          error: 'Unauthorized',
-          message: error.message,
-        },
-        { status: 401 }
-      );
-    }
-
-    if (error instanceof AppError) {
-      const statusCode =
-        error.name === 'AuthenticationError'
-          ? 401
-          : error.name === 'AuthorizationError'
-            ? 403
-            : 400;
-      return NextResponse.json(
-        {
-          error: error.name,
-          message: error.message,
-        },
-        { status: statusCode }
-      );
-    }
-
-    // Log unexpected errors
-    console.error('Unexpected error in GET /api/quotes/:id:', error);
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: 'An unexpected error occurred',
-      },
-      { status: 500 }
-    );
+    throw error;
   }
-}
+
+  if (userRole !== 'admin' && quote.userId !== userId) {
+    throw new AuthorizationError('You are not authorized to access this quote');
+  }
+
+  const response = apiSuccess(quote, 200, { includeDataFields: true });
+  logRequestEnd(request, startTime, 200);
+  return response;
+}, { operation: 'GET /api/quotes/:id' });
+
+// DELETE quote
+export const DELETE = withApiErrorHandler(async (
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) => {
+  const startTime = logRequestStart(request);
+  const payload = verifyAuthentication(request);
+  const userId = payload.userId;
+  const userRole = payload.role || 'user';
+
+  const quoteId = params.id;
+  if (!quoteId) {
+    throw new ValidationError('Quote ID is required');
+  }
+
+  const quote = await prisma.quote.findUnique({
+    where: { id: quoteId },
+  });
+
+  if (!quote) {
+    throw new NotFoundError('Quote not found');
+  }
+
+  if (userRole !== 'admin' && quote.userId !== userId) {
+    throw new AuthorizationError('Forbidden');
+  }
+
+  await prisma.quote.delete({
+    where: { id: quoteId },
+  });
+
+  const response = apiSuccess({ message: 'Quote deleted successfully' });
+  logRequestEnd(request, startTime, 200);
+  return response;
+}, { operation: 'DELETE /api/quotes/:id' });
+
+// PUT - Update quote status (admin only)
+export const PUT = withApiErrorHandler(async (
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) => {
+  const startTime = logRequestStart(request);
+  const payload = verifyAuthentication(request);
+  const userRole = payload.role || 'user';
+
+  const quoteId = params.id;
+  if (!quoteId) {
+    throw new ValidationError('Quote ID is required');
+  }
+
+  if (userRole !== 'admin') {
+    throw new AuthorizationError('Only admins can update quote status');
+  }
+
+  const body = await request.json();
+  const { status } = body;
+
+  if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
+    throw new ValidationError('Invalid status. Must be pending, approved, or rejected.');
+  }
+
+  await prisma.quote.update({
+    where: { id: quoteId },
+    data: { status },
+  });
+
+  const updatedQuote = await prisma.quote.findUnique({
+    where: { id: quoteId },
+    include: { offers: true, user: true },
+  });
+
+  if (!updatedQuote) {
+    throw new NotFoundError('Quote not found');
+  }
+
+  const response = apiSuccess({
+    quote: {
+      id: updatedQuote.id,
+      userId: updatedQuote.userId,
+      fullName: updatedQuote.fullName,
+      email: updatedQuote.user?.email || 'N/A',
+      address: updatedQuote.address,
+      monthlyConsumptionKwh: updatedQuote.monthlyConsumptionKwh,
+      systemSizeKw: updatedQuote.systemSizeKw,
+      downPayment: updatedQuote.downPayment ?? 0,
+      systemPrice: updatedQuote.systemPrice,
+      principalAmount: updatedQuote.principalAmount,
+      riskBand: updatedQuote.riskBand,
+      status: updatedQuote.status,
+      offers: updatedQuote.offers.map((offer) => ({
+        id: offer.id,
+        termYears: offer.termYears,
+        apr: offer.apr,
+        monthlyPayment: offer.monthlyPayment,
+      })),
+      createdAt: updatedQuote.createdAt,
+      updatedAt: updatedQuote.updatedAt,
+    },
+  });
+  logRequestEnd(request, startTime, 200);
+  return response;
+}, { operation: 'PUT /api/quotes/:id' });

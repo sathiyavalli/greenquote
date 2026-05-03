@@ -60,7 +60,7 @@ export class QuoteRepository {
   async findById(quoteId: string): Promise<QuoteWithOffers | null> {
     return prisma.quote.findUnique({
       where: { id: quoteId },
-      include: { offers: true },
+      include: { offers: true, user: true },
     });
   }
 
@@ -73,7 +73,7 @@ export class QuoteRepository {
         id: quoteId,
         userId,
       },
-      include: { offers: true },
+      include: { offers: true, user: true },
     });
   }
 

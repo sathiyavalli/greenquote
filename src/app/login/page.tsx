@@ -1,24 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginSchema, type LoginInput } from '@/utils/validation';
 import { useAuth } from '@/hooks/useAuth';
+import { Card, Input, Button, Alert, LoadingSpinner } from '@/components/ui';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [serverError, setServerError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const { login, token, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const intent = searchParams.get('intent');
+  const showQuoteMessage = intent === 'quote';
 
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && token) {
-      console.log('Already logged in, redirecting to quotes');
-      router.push('/quotes');
+      const storedUser = localStorage.getItem('auth-user');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        router.push(user.role === 'admin' ? '/admin' : '/quotes');
+      } else {
+        router.push('/quotes');
+      }
     }
   }, [token, authLoading, router]);
 
@@ -26,14 +36,47 @@ export default function LoginPage() {
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+
+  const email = watch('email');
+  const [emailError, setEmailError] = useState<string>('');
+
+  // Real-time email validation
+  useEffect(() => {
+    if (!email) {
+      setEmailError('');
+      return;
+    }
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Invalid email address');
+    } else {
+      setEmailError('');
+    }
+  }, [email]);
 
   const onSubmit = async (data: LoginInput) => {
     setIsLoading(true);
     setServerError('');
     try {
       await login(data.email, data.password);
-      router.push('/quotes');
+      setIsRedirecting(true);
+      
+      // Get user from localStorage to check role
+      const storedUser = localStorage.getItem('auth-user');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        if (user.role === 'admin') {
+          router.push('/admin');
+        } else {
+          router.push(showQuoteMessage ? '/quotes/create' : '/quotes');
+        }
+      } else {
+        router.push(showQuoteMessage ? '/quotes/create' : '/quotes');
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Login failed';
       setServerError(errorMsg);
@@ -42,69 +85,98 @@ export default function LoginPage() {
     }
   };
 
+  if (authLoading || isRedirecting) {
+    return (
+      <LoadingSpinner
+        fullPage
+        message={isRedirecting ? 'Signing you in and preparing your dashboard...' : 'Checking your session...'}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        {/* Logo / Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-green-600 rounded-xl mb-3">
-            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-emerald-900 to-gray-900 flex flex-col items-center justify-center px-4 py-12">
+      {/* Home Button */}
+      <Link
+        href="/"
+        className="absolute top-6 left-6 text-white hover:text-green-200 transition-colors"
+        title="Back to home"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+      </Link>
+      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+        <div className="hidden lg:flex flex-col justify-between rounded-3xl bg-white/10 border border-white/20 p-8 text-white">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-green-100">GreenQuote</p>
+            <h1 className="font-display text-4xl mt-4">Welcome back.</h1>
+            <p className="text-green-100/80 mt-4">
+              Review your quotes, explore payment terms, and keep your solar plan moving.
+            </p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-          <p className="text-gray-500 text-sm mt-1">Sign in to your GreenQuote account</p>
+          <div className="text-sm text-green-100/80">
+            Need an account? Create one in under a minute.
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-            <input
-              {...register('email')}
+        <Card className="w-full p-8 lg:p-10 rounded-3xl shadow-2xl">
+          <div className="mb-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-green-600">Sign in</p>
+            <h2 className="font-display text-3xl text-gray-900 mt-3">Access your account</h2>
+            <p className="text-sm text-gray-500 mt-2">Use your email and password to continue.</p>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+            {showQuoteMessage && (
+              <Alert
+                type="info"
+                message="Please sign in to request a quote. New here? Create an account to get started."
+              />
+            )}
+
+            {serverError && <Alert type="error" message={serverError} />}
+
+            <Input
+              label="Email Address"
               type="email"
               placeholder="jane@example.com"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              {...register('email')}
+              error={emailError || errors.email?.message}
             />
-            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
-          </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              {...register('password')}
+            <Input
+              label="Password"
               type="password"
               placeholder="Your password"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              {...register('password')}
+              error={errors.password?.message}
             />
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
-          </div>
 
-          {/* Server Error */}
-          {serverError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <p className="text-red-600 text-sm">{serverError}</p>
-            </div>
-          )}
+            <Button fullWidth loading={isLoading}>
+              {isLoading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
-          >
-            {isLoading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-green-600 hover:text-green-700 font-medium">
-            Create one free
-          </Link>
-        </p>
+          <p className="text-center text-sm text-gray-500 mt-6">
+            Don&apos;t have an account?{' '}
+            <Link
+              href={showQuoteMessage ? '/register?intent=quote' : '/register'}
+              className="text-green-600 hover:text-green-700 font-medium"
+            >
+              Create one free
+            </Link>
+          </p>
+        </Card>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner fullPage message="Preparing sign in..." />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

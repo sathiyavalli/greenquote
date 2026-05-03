@@ -20,5 +20,9 @@ RUN npm run build
 # Expose port
 EXPOSE 3000
 
+# Runtime defaults
+ENV NODE_ENV=production
+ENV PORT=3000
+
 # Start app
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

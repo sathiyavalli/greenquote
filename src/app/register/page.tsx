@@ -1,24 +1,100 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { registerSchema, type RegisterInput } from '@/utils/validation';
+import { Card, Input, Button, Alert, LoadingSpinner } from '@/components/ui';
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const [serverError, setServerError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const intent = searchParams.get('intent');
+  const showQuoteMessage = intent === 'quote';
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm<RegisterInput>({ resolver: zodResolver(registerSchema) });
 
+  const email = watch('email');
+  const [emailError, setEmailError] = useState<string>('');
+  const [emailExists, setEmailExists] = useState<boolean>(false);
+  const [checkingEmail, setCheckingEmail] = useState<boolean>(false);
+  const debounceTimer = useRef<NodeJS.Timeout>();
+
+  // Real-time email validation and existence check
+  useEffect(() => {
+    if (!email) {
+      setEmailError('');
+      setEmailExists(false);
+      setCheckingEmail(false);
+      return;
+    }
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Invalid email address');
+      setEmailExists(false);
+      setCheckingEmail(false);
+      return;
+    }
+
+    setEmailError('');
+
+    // Debounce email existence check
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    setCheckingEmail(true);
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+
+        const data = await response.json();
+        const payload = data.data || data;
+        if (payload.exists) {
+          setEmailError('Email already exists');
+          setEmailExists(true);
+        } else {
+          setEmailError('');
+          setEmailExists(false);
+        }
+      } catch (error) {
+        console.error('Error checking email:', error);
+        setEmailError('');
+        setEmailExists(false);
+      } finally {
+        setCheckingEmail(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [email]);
+
   const onSubmit = async (data: RegisterInput) => {
+    // Prevent submission if email is invalid or exists
+    if (emailExists || emailError) {
+      return;
+    }
+
     setIsLoading(true);
     setServerError('');
     try {
@@ -36,7 +112,9 @@ export default function RegisterPage() {
       const { token, user } = json.data;
       localStorage.setItem('auth-token', token);
       localStorage.setItem('auth-user', JSON.stringify(user));
-      router.push('/quotes/create');
+      setIsRedirecting(true);
+      // Force full navigation so auth context is initialized from storage.
+      window.location.assign(user.role === 'admin' ? '/admin' : '/quotes/create');
     } catch {
       setServerError('Something went wrong. Please try again.');
     } finally {
@@ -44,81 +122,107 @@ export default function RegisterPage() {
     }
   };
 
+  if (isRedirecting) {
+    return <LoadingSpinner fullPage message="Creating your account and setting things up..." />;
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        {/* Logo / Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-green-600 rounded-xl mb-3">
-            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
+    <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-green-900 to-gray-900 flex flex-col items-center justify-center px-4 py-12">
+      {/* Home Button */}
+      <Link
+        href="/"
+        className="absolute top-6 left-6 text-white hover:text-green-200 transition-colors"
+        title="Back to home"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+      </Link>
+      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+        <div className="hidden lg:flex flex-col justify-between rounded-3xl bg-white/10 border border-white/20 p-8 text-white">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-green-100">GreenQuote</p>
+            <h1 className="font-display text-4xl mt-4">Create your account.</h1>
+            <p className="text-green-100/80 mt-4">
+              Save quotes, compare offers, and move from interest to installation faster.
+            </p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
-          <p className="text-gray-500 text-sm mt-1">Start your solar financing journey</p>
+          <div className="text-sm text-green-100/80">
+            Already have an account? Sign in anytime.
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-          {/* Full Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-            <input
-              {...register('fullName')}
+        <Card className="w-full p-8 lg:p-10 rounded-3xl shadow-2xl">
+          <div className="mb-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-green-600">Sign up</p>
+            <h2 className="font-display text-3xl text-gray-900 mt-3">Start your journey</h2>
+            <p className="text-sm text-gray-500 mt-2">Create your account in a few steps.</p>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+            {showQuoteMessage && (
+              <Alert
+                type="info"
+                message="Create an account to get your solar quote in minutes."
+              />
+            )}
+
+            {serverError && <Alert type="error" message={serverError} />}
+
+            <Input
+              label="Full Name"
               type="text"
               placeholder="Jane Doe"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              {...register('fullName')}
+              error={errors.fullName?.message}
             />
-            {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName.message}</p>}
-          </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-            <input
-              {...register('email')}
-              type="email"
-              placeholder="jane@example.com"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            />
-            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
-          </div>
+            <div className="relative">
+              <Input
+                label="Email Address"
+                type="email"
+                placeholder="jane@example.com"
+                {...register('email')}
+                error={emailError || errors.email?.message}
+              />
+              {checkingEmail && email && (
+                <div className="text-xs text-blue-600 mt-1">Checking email...</div>
+              )}
+            </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              {...register('password')}
+            <Input
+              label="Password"
               type="password"
               placeholder="Min 8 chars, 1 uppercase, 1 number"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              {...register('password')}
+              error={errors.password?.message}
+              helperText="Minimum 8 characters, 1 uppercase letter, 1 number"
             />
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
-          </div>
 
-          {/* Server Error */}
-          {serverError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <p className="text-red-600 text-sm">{serverError}</p>
-            </div>
-          )}
+            <Button fullWidth loading={isLoading} disabled={!!emailError || emailExists || checkingEmail}>
+              {isLoading ? 'Creating account...' : 'Create Account'}
+            </Button>
+          </form>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
-          >
-            {isLoading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Already have an account?{' '}
-          <Link href="/login" className="text-green-600 hover:text-green-700 font-medium">
-            Sign in
-          </Link>
-        </p>
+          <p className="text-center text-sm text-gray-500 mt-6">
+            Already have an account?{' '}
+            <Link
+              href={showQuoteMessage ? '/login?intent=quote' : '/login'}
+              className="text-green-600 hover:text-green-700 font-medium"
+            >
+              Sign in
+            </Link>
+          </p>
+        </Card>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner fullPage message="Preparing registration..." />}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }

@@ -59,6 +59,7 @@ async function main() {
       systemPrice: 8400, // 7 * 1200
       principalAmount: 3400, // 8400 - 5000
       riskBand: 'A',
+      status: 'pending',
     },
   });
 
@@ -84,6 +85,7 @@ async function main() {
       systemPrice: 3600, // 3 * 1200
       principalAmount: 1600, // 3600 - 2000
       riskBand: 'C',
+      status: 'approved',
     },
   });
 

@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { logger } from '@/utils/logger';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 
@@ -17,7 +18,7 @@ export function verifyToken(token: string): TokenPayload | null {
     const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
     return decoded;
   } catch (error) {
-    console.error('Token verification failed:', error);
+    logger.error('Token verification failed', error);
     return null;
   }
 }

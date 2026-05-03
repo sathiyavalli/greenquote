@@ -14,6 +14,7 @@ export interface QuoteResponse {
   id: string;
   userId: string;
   fullName: string;
+  email: string;
   address: string;
   monthlyConsumptionKwh: number;
   systemSizeKw: number;
@@ -21,6 +22,7 @@ export interface QuoteResponse {
   systemPrice: number;
   principalAmount: number;
   riskBand: RiskBand;
+  status: string;
   offers: OfferResult[];
   createdAt: Date;
   updatedAt: Date;
@@ -137,6 +139,7 @@ export class QuoteService {
       id: quote.id,
       userId: quote.userId,
       fullName: quote.fullName,
+      email: (quote as any).user?.email || 'N/A',
       address: quote.address,
       monthlyConsumptionKwh: quote.monthlyConsumptionKwh,
       systemSizeKw: quote.systemSizeKw,
@@ -144,6 +147,7 @@ export class QuoteService {
       systemPrice: quote.systemPrice,
       principalAmount: quote.principalAmount,
       riskBand: quote.riskBand as RiskBand,
+      status: (quote as any).status || 'pending',
       offers: quote.offers.map((o) => ({
         termYears: o.termYears,
         apr: o.apr,

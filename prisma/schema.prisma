@@ -40,6 +40,7 @@ model Quote {
   systemPrice             Float
   principalAmount         Float
   riskBand                String   // A, B, or C
+  status                  String   @default("pending") // pending, approved, rejected
   
   // Relations
   offers                  Offer[]
@@ -49,6 +50,7 @@ model Quote {
 
   @@index([userId])
   @@index([riskBand])
+  @@index([status])
   @@index([createdAt])
 }
 

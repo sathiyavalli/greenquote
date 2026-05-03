@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { quoteInputSchema, type QuoteInput } from '@/utils/validation';
 import { useAuth } from '@/hooks/useAuth';
+import { Button, Card, Alert, Input, FormField, LoadingSpinner } from '@/components/ui';
 
 interface QuoteFormData extends QuoteInput {}
 
@@ -30,10 +31,19 @@ export default function CreateQuotePage() {
     },
   });
 
-  // Auto-fill user data
-  if (user && !watch('fullName')) {
-    setValue('fullName', user.fullName || '');
-  }
+  // Redirect admins to the admin quotes view.
+  useEffect(() => {
+    if (!authLoading && user?.role === 'admin') {
+      router.push('/admin/quotes');
+    }
+  }, [user?.role, authLoading, router]);
+
+  // Auto-fill user data when auth state becomes available.
+  useEffect(() => {
+    if (user && !watch('fullName')) {
+      setValue('fullName', user.fullName || '');
+    }
+  }, [user, watch, setValue]);
 
   const onSubmit = async (data: QuoteFormData) => {
     try {
@@ -58,16 +68,20 @@ export default function CreateQuotePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        setError(errorData.message || 'Failed to create quote');
+        setError(errorData.error?.message || errorData.message || 'Failed to create quote');
         return;
       }
 
-      const result = await response.json();
-      setQuoteResult(result);
+      const json = await response.json();
+      const quote = json.data;
+      setQuoteResult(quote);
+
+      // Scroll to top to show success message
+      window.scrollTo(0, 0);
 
       // Auto-redirect to quote details after 2 seconds
       setTimeout(() => {
-        router.push(`/quotes/${result.id}`);
+        router.push(`/quotes/${quote.id}`);
       }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -77,215 +91,166 @@ export default function CreateQuotePage() {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner fullPage message="Loading..." />;
+  }
+
+  // Show loading if redirecting admin
+  if (user?.role === 'admin') {
+    return <LoadingSpinner fullPage message="Redirecting..." />;
   }
 
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Please log in to continue
-          </h1>
+        <Card className="max-w-md w-full p-8 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please log in</h1>
           <p className="text-gray-600 mb-6">
             You need to be logged in to request a solar quote.
           </p>
-          <button
-            onClick={() => router.push('/login')}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-lg transition"
-          >
+          <Button onClick={() => router.push('/login')} className="w-full">
             Go to Login
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-8">
+        <Card className="p-8">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Solar Quote Request
-            </h1>
-            <p className="text-gray-600">
+            <h1 className="text-3xl font-bold text-gray-900">Solar Quote Request</h1>
+            <p className="text-gray-600 mt-2">
               Provide your details below for a personalized solar financing quote.
             </p>
           </div>
 
           {quoteResult && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h3 className="text-lg font-semibold text-green-900 mb-2">
-                ✓ Quote Created Successfully!
-              </h3>
-              <p className="text-green-700 mb-4">
-                Redirecting to quote details in 2 seconds...
-              </p>
-              <div className="space-y-2 text-sm text-green-700">
-                <p>
-                  <strong>System Price:</strong> ${quoteResult.systemPrice.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Risk Band:</strong> {quoteResult.riskBand}
-                </p>
-                <p>
-                  <strong>Offers:</strong> {quoteResult.offers.length} financing options available
-                </p>
-              </div>
-            </div>
+            <Alert
+              type="success"
+              title="Quote Created Successfully!"
+              message="Redirecting to quote details..."
+              className="mb-6"
+            />
           )}
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-700 font-medium">{error}</p>
-            </div>
+            <Alert type="error" title="Error" message={error} className="mb-6" />
           )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Email */}
+            <FormField label="Email Address" required>
+              <Input
+                type="email"
+                value={user?.email || ''}
+                disabled
+                helperText="Your registered email"
+              />
+            </FormField>
+
             {/* Full Name */}
-            <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
-              </label>
-              <input
-                id="fullName"
-                type="text"
+            <FormField
+              label="Full Name"
+              error={errors.fullName?.message}
+              required
+            >
+              <Input
                 {...register('fullName')}
                 disabled={isSubmitting}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                 placeholder="John Doe"
               />
-              {errors.fullName && (
-                <p className="mt-1 text-sm text-red-600">{errors.fullName.message}</p>
-              )}
-            </div>
+            </FormField>
 
             {/* Address */}
-            <div>
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                Street Address
-              </label>
-              <input
-                id="address"
-                type="text"
+            <FormField
+              label="Street Address"
+              error={errors.address?.message}
+              required
+            >
+              <Input
                 {...register('address')}
                 disabled={isSubmitting}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                 placeholder="123 Main St, San Francisco, CA"
               />
-              {errors.address && (
-                <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
-              )}
-            </div>
+            </FormField>
 
             {/* Monthly Consumption */}
-            <div>
-              <label
-                htmlFor="monthlyConsumptionKwh"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Monthly Consumption (kWh)
-              </label>
-              <input
-                id="monthlyConsumptionKwh"
+            <FormField
+              label="Monthly Consumption (kWh)"
+              error={errors.monthlyConsumptionKwh?.message}
+              helperText="Check your recent electricity bill for this number"
+              required
+            >
+              <Input
                 type="number"
                 step="10"
                 {...register('monthlyConsumptionKwh', {
                   valueAsNumber: true,
                 })}
                 disabled={isSubmitting}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                 placeholder="1200"
               />
-              <p className="mt-1 text-sm text-gray-500">
-                Check your recent electricity bill for this number
-              </p>
-              {errors.monthlyConsumptionKwh && (
-                <p className="mt-1 text-sm text-red-600">
-                  {errors.monthlyConsumptionKwh.message}
-                </p>
-              )}
-            </div>
+            </FormField>
 
             {/* System Size */}
-            <div>
-              <label htmlFor="systemSizeKw" className="block text-sm font-medium text-gray-700 mb-1">
-                System Size (kW)
-              </label>
-              <input
-                id="systemSizeKw"
+            <FormField
+              label="System Size (kW)"
+              error={errors.systemSizeKw?.message}
+              helperText="Estimated solar system size for your home"
+              required
+            >
+              <Input
                 type="number"
-                step="0.1"
+                step="0.5"
                 {...register('systemSizeKw', {
                   valueAsNumber: true,
                 })}
                 disabled={isSubmitting}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                 placeholder="5.5"
               />
-              <p className="mt-1 text-sm text-gray-500">
-                Estimated solar system size for your home
-              </p>
-              {errors.systemSizeKw && (
-                <p className="mt-1 text-sm text-red-600">{errors.systemSizeKw.message}</p>
-              )}
-            </div>
+            </FormField>
 
-            {/* Down Payment (Optional) */}
-            <div>
-              <label htmlFor="downPayment" className="block text-sm font-medium text-gray-700 mb-1">
-                Down Payment (Optional)
-              </label>
-              <input
-                id="downPayment"
+            {/* Down Payment */}
+            <FormField
+              label="Down Payment (Optional)"
+              error={errors.downPayment?.message}
+              helperText="How much can you pay upfront? (Leave at 0 for none)"
+            >
+              <Input
                 type="number"
                 step="100"
                 {...register('downPayment', {
                   valueAsNumber: true,
                 })}
                 disabled={isSubmitting}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                 placeholder="0"
               />
-              <p className="mt-1 text-sm text-gray-500">
-                How much can you pay upfront? (Leave at 0 for none)
-              </p>
-              {errors.downPayment && (
-                <p className="mt-1 text-sm text-red-600">{errors.downPayment.message}</p>
-              )}
-            </div>
+            </FormField>
 
-            {/* Submit Button */}
-            <div className="pt-4">
-              <button
+            {/* Buttons */}
+            <div className="flex gap-4 pt-6">
+              <Button
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded-lg transition duration-200"
+                loading={isSubmitting}
+                fullWidth
+                className="flex-1"
               >
                 {isSubmitting ? 'Creating Quote...' : 'Get Your Quote'}
-              </button>
-            </div>
-
-            {/* Back Button */}
-            <div className="pt-2">
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => router.back()}
-                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 rounded-lg transition duration-200"
+                fullWidth
+                className="flex-1"
               >
                 Back
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Card>
       </div>
     </div>
   );

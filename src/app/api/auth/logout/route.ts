@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, withApiErrorHandler } from '@/lib/api';
+import { logRequestStart, logRequestEnd } from '@/lib/logging-middleware';
 
-export async function POST() {
-  const response = NextResponse.json(
-    { success: true, data: { message: 'Logged out successfully' }, timestamp: new Date().toISOString() },
-    { status: 200 }
-  );
+export const POST = withApiErrorHandler(async (req: NextRequest) => {
+  const startTime = logRequestStart(req);
+  const response = apiSuccess({ message: 'Logged out successfully' }, 200);
+  logRequestEnd(req, startTime, 200);
 
   response.cookies.set('auth-token', '', {
     httpOnly: true,
@@ -15,4 +16,4 @@ export async function POST() {
   });
 
   return response;
-}
+}, { operation: 'POST /api/auth/logout' });
