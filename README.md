@@ -354,16 +354,10 @@ The app includes print-friendly styles (`print-hidden`) so navigation and action
 3. Write/update tests
 4. Submit PR with description
 
-## License
-
-MIT
-
 ## Support
 
 For issues or questions, create a GitHub issue or contact the team.
 
 ---
 
-**Built with ❤️ by the GreenQuote team**
-
-Last updated: April 29, 2026
+Last updated: May 04, 2026
